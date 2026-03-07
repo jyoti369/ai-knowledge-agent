@@ -4,7 +4,7 @@ Generates multiple query variations for better search recall.
 """
 
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -29,9 +29,9 @@ def multi_query_search_tool(query: str) -> str:
         deduplicated and ranked by relevance.
     """
     # Generate query variations using LLM
-    llm = ChatOpenAI(
+    llm = ChatGroq(
         model=Config.LLM_MODEL,
-        openai_api_key=Config.OPENAI_API_KEY,
+        api_key=Config.GROQ_API_KEY,
         temperature=0.7,
     )
 

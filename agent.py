@@ -7,12 +7,11 @@ from documents stored in Pinecone.
 import argparse
 import sys
 
-from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_react_agent
+from langchain_groq import ChatGroq
+from langchain_classic.agents import AgentExecutor, create_react_agent
 from langchain_core.prompts import PromptTemplate
 from rich.console import Console
 from rich.panel import Panel
-from rich.markdown import Markdown
 
 from config import Config
 from tools import vector_search_tool, summarize_tool, multi_query_search_tool
@@ -59,9 +58,9 @@ def create_agent() -> AgentExecutor:
     """Create and configure the ReAct agent with tools."""
     Config.validate()
 
-    llm = ChatOpenAI(
+    llm = ChatGroq(
         model=Config.LLM_MODEL,
-        openai_api_key=Config.OPENAI_API_KEY,
+        api_key=Config.GROQ_API_KEY,
         temperature=0,
     )
 

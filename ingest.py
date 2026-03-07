@@ -21,30 +21,42 @@ console = Console()
 
 
 def ensure_pinecone_index() -> None:
-    """Create Pinecone index if it doesn't exist."""
+    """Create Pinecone index if it doesn't exist, or recreate if dimensions mismatch."""
     pc = Pinecone(api_key=Config.PINECONE_API_KEY)
     existing_indexes = [idx.name for idx in pc.list_indexes()]
 
-    if Config.PINECONE_INDEX_NAME not in existing_indexes:
-        console.print(f"[cyan]📦 Creating Pinecone index: {Config.PINECONE_INDEX_NAME}...[/cyan]")
-        pc.create_index(
-            name=Config.PINECONE_INDEX_NAME,
-            dimension=Config.EMBEDDING_DIMENSION,
-            metric="cosine",
-            spec=ServerlessSpec(cloud="aws", region="us-east-1"),
-        )
-        # Wait for index to be ready
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Waiting for index to be ready...", total=None)
-            while not pc.describe_index(Config.PINECONE_INDEX_NAME).status.get("ready"):
-                time.sleep(1)
-            progress.update(task, description="Index is ready! ✅")
-    else:
-        console.print(f"[green]✅ Pinecone index '{Config.PINECONE_INDEX_NAME}' already exists.[/green]")
+    if Config.PINECONE_INDEX_NAME in existing_indexes:
+        # Check if dimensions match
+        index_info = pc.describe_index(Config.PINECONE_INDEX_NAME)
+        current_dim = index_info.dimension
+        if current_dim != Config.EMBEDDING_DIMENSION:
+            console.print(
+                f"[yellow]⚠️  Index '{Config.PINECONE_INDEX_NAME}' has dimension {current_dim}, "
+                f"but we need {Config.EMBEDDING_DIMENSION}. Deleting and recreating...[/yellow]"
+            )
+            pc.delete_index(Config.PINECONE_INDEX_NAME)
+            time.sleep(2)
+        else:
+            console.print(f"[green]✅ Pinecone index '{Config.PINECONE_INDEX_NAME}' already exists.[/green]")
+            return
+
+    console.print(f"[cyan]📦 Creating Pinecone index: {Config.PINECONE_INDEX_NAME} (dim={Config.EMBEDDING_DIMENSION})...[/cyan]")
+    pc.create_index(
+        name=Config.PINECONE_INDEX_NAME,
+        dimension=Config.EMBEDDING_DIMENSION,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region="us-east-1"),
+    )
+    # Wait for index to be ready
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Waiting for index to be ready...", total=None)
+        while not pc.describe_index(Config.PINECONE_INDEX_NAME).status.get("ready"):
+            time.sleep(1)
+        progress.update(task, description="Index is ready! ✅")
 
 
 def ingest() -> None:
@@ -52,13 +64,16 @@ def ingest() -> None:
     console.print(
         Panel(
             "[bold cyan]🚀 AI Knowledge Agent — Document Ingestion[/bold cyan]\n"
-            "Loading, chunking, embedding, and storing documents in Pinecone.",
+            "Loading, chunking, embedding, and storing documents in Pinecone.\n"
+            "[dim]Using FREE models: HuggingFace embeddings + Google Gemini[/dim]",
             border_style="cyan",
         )
     )
 
-    # Validate config
-    Config.validate()
+    # Validate config (only Pinecone key needed for ingestion)
+    if not Config.PINECONE_API_KEY:
+        console.print("[red]❌ PINECONE_API_KEY is not set in .env[/red]")
+        sys.exit(1)
 
     # Step 1: Load documents
     console.print("\n[bold]📄 Step 1: Loading Documents[/bold]")
@@ -83,8 +98,9 @@ def ingest() -> None:
     ensure_pinecone_index()
     console.print()
 
-    # Step 4: Generate embeddings and store in Pinecone
-    console.print("[bold]🔢 Step 4: Generating Embeddings & Storing in Pinecone[/bold]")
+    # Step 4: Generate embeddings (locally!) and store in Pinecone
+    console.print("[bold]🔢 Step 4: Generating Embeddings (local) & Storing in Pinecone[/bold]")
+    console.print(f"   Embedding model: [cyan]{Config.EMBEDDING_MODEL}[/cyan] (runs locally, free)")
     embeddings = get_embedding_model()
 
     with Progress(
@@ -109,7 +125,7 @@ def ingest() -> None:
             f"• Documents loaded: {len(documents)}\n"
             f"• Chunks created: {len(chunks)}\n"
             f"• Pinecone index: {Config.PINECONE_INDEX_NAME}\n"
-            f"• Embedding model: {Config.EMBEDDING_MODEL}\n\n"
+            f"• Embedding model: {Config.EMBEDDING_MODEL} (free, local)\n\n"
             f"[dim]Run [bold]python agent.py[/bold] to start querying your knowledge base.[/dim]",
             border_style="green",
         )

@@ -1,9 +1,9 @@
 """
-Summarization tool using LLM to condense retrieved document chunks.
+Summarization tool using Groq (free tier).
 """
 
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import Config
@@ -23,9 +23,9 @@ def summarize_tool(text: str) -> str:
     Returns:
         A concise, well-structured summary of the input text.
     """
-    llm = ChatOpenAI(
+    llm = ChatGroq(
         model=Config.LLM_MODEL,
-        openai_api_key=Config.OPENAI_API_KEY,
+        api_key=Config.GROQ_API_KEY,
         temperature=0.3,
     )
 

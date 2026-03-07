@@ -2,24 +2,12 @@
 
 A **Retrieval-Augmented Generation (RAG)** powered knowledge assistant that uses **Agentic AI** with **Pinecone** vector database to intelligently answer questions from your documents.
 
+**✨ 100% Free Stack**: This version uses **Groq** for insanely fast LLM inference (Llama 3.3 70B) and **HuggingFace** for local embeddings, meaning zero subscription costs and no credit card required.
+
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
 ![LangChain](https://img.shields.io/badge/LangChain-Agents-green?logo=chainlink)
 ![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-purple)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4-orange?logo=openai)
-
----
-
-## 🧠 What is This?
-
-This project demonstrates a practical use-case of **Agentic AI** combined with a **Vector Database (Pinecone)**:
-
-1. **Ingest** — Load documents (`.txt`, `.pdf`, `.md`) → chunk them → generate embeddings → store in Pinecone
-2. **Ask** — Query the AI agent with natural language questions
-3. **Agent Reasons** — The agent autonomously decides which tools to use:
-   - 🔍 **Semantic Search** — Find the most relevant document chunks
-   - 📝 **Summarize** — Generate concise summaries of retrieved content
-   - 🔗 **Multi-Query** — Reformulate your question for better retrieval
-4. **Answer** — Returns a well-structured answer with source citations
+![Groq](https://img.shields.io/badge/Groq-Llama_3-orange)
 
 ---
 
@@ -52,7 +40,7 @@ This project demonstrates a practical use-case of **Agentic AI** combined with a
 │  │Chunk1│ │Chunk2│ │Chunk3│ │Chunk4│ │Chunk5│ ...   │
 │  │ 🔢   │ │ 🔢   │ │ 🔢   │ │ 🔢   │ │ 🔢   │      │
 │  └──────┘ └──────┘ └──────┘ └──────┘ └──────┘      │
-│     Embeddings (OpenAI text-embedding-3-small)       │
+│   Embeddings (Local: all-MiniLM-L6-v2)               │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -63,156 +51,91 @@ This project demonstrates a practical use-case of **Agentic AI** combined with a
 ### Prerequisites
 
 - Python 3.10+
-- OpenAI API Key
-- Pinecone API Key (free tier works!)
+- **Groq API Key** (Free, instant here: [console.groq.com/keys](https://console.groq.com/keys))
+- **Pinecone API Key** (Free tier here: [app.pinecone.io](https://app.pinecone.io))
 
-### 1. Clone the Repository
+### 1. Installation
 
 ```bash
 git clone https://github.com/jyoti369/ai-knowledge-agent.git
 cd ai-knowledge-agent
-```
-
-### 2. Create a Virtual Environment
-
-```bash
 python3 -m venv venv
-source venv/bin/activate  # macOS/Linux
-# venv\Scripts\activate   # Windows
-```
-
-### 3. Install Dependencies
-
-```bash
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure Environment Variables
+### 2. Configuration
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your API keys:
+Edit your `.env` file and paste in your two API keys:
 
-```env
-OPENAI_API_KEY=sk-your-openai-api-key
-PINECONE_API_KEY=your-pinecone-api-key
+```bash
+GROQ_API_KEY=gsk_your-groq-key
+PINECONE_API_KEY=pcsk_your-pinecone-key
 PINECONE_INDEX_NAME=knowledge-agent
 ```
 
-### 5. Ingest Documents
+---
 
-Place your documents in the `data/` folder, then run:
+## 💻 Commands & Expectations
+
+### 1. Ingest Documents into the Database
+
+Before asking questions, you need to give the agent knowledge. Simply place your files (`.pdf`, `.txt`, `.md`) into the `data/` folder and run:
 
 ```bash
 python ingest.py
 ```
 
-Supported formats: `.txt`, `.pdf`, `.md`
+**What to expect:**
+- The script automatically reads your files and splits them into 1000-character chunks.
+- It generates embeddings (numerical representations) entirely locally on your machine using `all-MiniLM-L6-v2` (no internet upload required for embeddings).
+- It creates the `knowledge-agent` index in Pinecone if it doesn't exist.
+- It uploads the chunks to your Pinecone vector database.
+- A neat terminal UI displays the progress.
 
-### 6. Ask Questions
+### 2. Start the Interactive Agent
 
-**Interactive Mode (CLI Chat):**
+Once documents are ingested, start the interactive chat to query your documents:
 
 ```bash
 python agent.py
 ```
 
-**Single Query Mode:**
+**What to expect:**
+- **Interactive Chat Interface**: You will enter a loop where you can ask back-to-back questions. Type `quit` to exit.
+- **Autonomous Reasoning**: When you ask a question, you'll see a `🧠 Thinking...` message while the Agent (powered by Groq) decides what tools to use.
+- **Tool Selection**:
+  - `vector_search_tool`: Searches Pinecone for semantic matches to your query.
+  - `summarize_tool`: Synthesizes lengthy retrieved chunks into a clean summary.
+  - `multi_query_search_tool`: If the first search is bad, the agent re-words your question multiple times to cast a wider net.
+- **Sourced Answers**: The agent will read the results and output a well-formatted answer, citing the specific document name (e.g., `Debojyoti_Mandal_Resume.pdf`) and chunk number it used to form the answer.
+
+### 3. Run a Single Prompt (CLI Mode)
+
+If you just want an answer and immediate exit (useful for scripts/automation):
 
 ```bash
-python agent.py --query "What are the key concepts discussed in the documents?"
+python agent.py --query "Summarize the key experience points in my resume."
 ```
+
+**What to expect:**
+- Same behavior as above, but executes once and returns you directly back to your terminal shell.
 
 ---
 
-## 📂 Project Structure
+## 🛠️ How it Works under the Hood
 
-```
-ai-knowledge-agent/
-├── agent.py              # Main agentic AI entry point (ReAct agent)
-├── ingest.py             # Document ingestion pipeline
-├── config.py             # Configuration & environment variables
-├── tools/
-│   ├── __init__.py
-│   ├── search.py         # Semantic search tool (Pinecone)
-│   ├── summarizer.py     # Document summarization tool
-│   └── multi_query.py    # Multi-query retrieval tool
-├── utils/
-│   ├── __init__.py
-│   ├── document_loader.py# Load & chunk documents
-│   └── embeddings.py     # Embedding generation utilities
-├── data/                 # Place your documents here
-│   └── sample.txt        # Sample document for testing
-├── requirements.txt
-├── .env.example
-├── .gitignore
-└── README.md
-```
+This project uses the **ReAct (Reasoning + Acting)** pattern via LangChain. Instead of a standard chatbot, it is an **Agent**:
 
----
-
-## 💡 Example Usage
-
-```
-🤖 AI Knowledge Agent - Interactive Mode
-Type 'quit' to exit, 'clear' to reset conversation.
-──────────────────────────────────────────
-
-You: What is retrieval-augmented generation?
-
-🧠 Agent is thinking...
-   → Using tool: vector_search
-   → Found 3 relevant chunks
-   → Using tool: summarizer
-
-🤖 Answer:
-Retrieval-Augmented Generation (RAG) is a technique that combines
-information retrieval with text generation. Instead of relying solely
-on a language model's training data, RAG first searches a knowledge
-base (in this case, Pinecone vector DB) for relevant information,
-then uses that context to generate accurate, grounded answers.
-
-📚 Sources:
-  • sample.txt (chunk 2, relevance: 0.94)
-  • sample.txt (chunk 5, relevance: 0.89)
-```
-
----
-
-## 🛠️ How the Agent Works
-
-This project uses the **ReAct (Reasoning + Acting)** pattern via LangChain:
-
-1. **Thought** — The agent reasons about what information it needs
-2. **Action** — It selects and calls the appropriate tool
-3. **Observation** — It processes the tool's output
-4. **Repeat** — Until it has enough information to answer
-5. **Final Answer** — Delivers a comprehensive response with citations
-
-The agent has access to these tools:
-
-| Tool | Description |
-|------|-------------|
-| `vector_search` | Performs semantic similarity search in Pinecone |
-| `summarize_results` | Summarizes retrieved document chunks |
-| `multi_query_search` | Generates multiple query variations for better recall |
-
----
-
-## 🔧 Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | OpenAI API key for embeddings & LLM | Required |
-| `PINECONE_API_KEY` | Pinecone API key | Required |
-| `PINECONE_INDEX_NAME` | Name of the Pinecone index | `knowledge-agent` |
-| `EMBEDDING_MODEL` | OpenAI embedding model | `text-embedding-3-small` |
-| `LLM_MODEL` | OpenAI chat model | `gpt-4o-mini` |
-| `CHUNK_SIZE` | Document chunk size (chars) | `1000` |
-| `CHUNK_OVERLAP` | Overlap between chunks | `200` |
-| `TOP_K` | Number of results to retrieve | `5` |
+1. **Thought** — "The user is asking about the resume. I need to search the database for 'resume experience'."
+2. **Action** — Calls the `vector_search_tool`.
+3. **Observation** — Reads the returned chunks from Pinecone.
+4. **Repeat** — "These chunks are too long, I should summarize them" → Calls `summarize_tool`.
+5. **Final Answer** — Delivers a comprehensive response with citations.
 
 ---
 
@@ -220,12 +143,4 @@ The agent has access to these tools:
 
 MIT License — feel free to use this in your own projects!
 
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-*Built with ❤️ using LangChain, Pinecone, and OpenAI*
+*Built with ❤️ using LangChain, Groq, Pinecone, and HuggingFace Local Embeddings.*

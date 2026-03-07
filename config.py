@@ -13,16 +13,16 @@ load_dotenv()
 class Config:
     """Application configuration loaded from environment variables."""
 
-    # OpenAI
-    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    # Groq (free tier — no credit card needed)
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 
     # Pinecone
     PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
     PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "knowledge-agent")
 
     # Models
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
 
     # Chunking
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "1000"))
@@ -34,15 +34,15 @@ class Config:
     # Paths
     DATA_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 
-    # Embedding dimensions for text-embedding-3-small
-    EMBEDDING_DIMENSION: int = 1536
+    # Embedding dimensions for all-MiniLM-L6-v2
+    EMBEDDING_DIMENSION: int = 384
 
     @classmethod
     def validate(cls) -> None:
         """Validate that required configuration is present."""
         errors = []
-        if not cls.OPENAI_API_KEY:
-            errors.append("OPENAI_API_KEY is not set")
+        if not cls.GROQ_API_KEY:
+            errors.append("GROQ_API_KEY is not set")
         if not cls.PINECONE_API_KEY:
             errors.append("PINECONE_API_KEY is not set")
 
