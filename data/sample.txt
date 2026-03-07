@@ -1,0 +1,76 @@
+Understanding Retrieval-Augmented Generation (RAG)
+
+Retrieval-Augmented Generation (RAG) is an AI framework that combines information retrieval with
+text generation to produce more accurate and factual responses. It was introduced by researchers
+at Facebook AI Research (FAIR) in 2020.
+
+How RAG Works
+RAG operates in two main phases:
+
+1. Retrieval Phase: When a user asks a question, the system first searches a knowledge base
+(such as a vector database) for relevant documents or passages. This is done using semantic
+similarity search, where the query is converted to a vector embedding and compared against
+stored document embeddings.
+
+2. Generation Phase: The retrieved documents are then passed as context to a large language
+model (LLM), which generates a response grounded in the retrieved information rather than
+relying solely on its training data.
+
+Benefits of RAG
+- Reduced Hallucination: By grounding responses in retrieved facts, RAG significantly
+  reduces the tendency of LLMs to generate incorrect information.
+- Up-to-date Information: Unlike static LLMs, RAG can access current information stored
+  in the knowledge base, making it suitable for dynamic domains.
+- Source Attribution: RAG systems can cite their sources, improving transparency and trust.
+- Cost Efficiency: Instead of fine-tuning large models on specific data, RAG allows you to
+  simply update the knowledge base.
+
+Vector Databases in RAG
+Vector databases like Pinecone, Weaviate, and Chroma play a crucial role in RAG systems:
+
+- They store document embeddings (dense vector representations of text).
+- They enable fast approximate nearest neighbor (ANN) search.
+- They scale to millions or billions of vectors.
+- Pinecone specifically offers serverless deployment, automatic scaling, and metadata filtering.
+
+Agentic AI and RAG
+Agentic AI takes RAG a step further by introducing autonomous decision-making:
+
+- An AI agent can decide whether to search the knowledge base, summarize results,
+  or rephrase the query for better retrieval.
+- Agents use the ReAct (Reasoning + Acting) pattern to iteratively think and act.
+- Tools are functions that agents can call, such as vector search, web search, or calculation.
+- LangChain and LlamaIndex are popular frameworks for building agentic RAG systems.
+
+Common Use Cases
+1. Enterprise Knowledge Management: Employees can query internal documentation, policies,
+   and procedures using natural language.
+2. Customer Support: Automated support systems that search product documentation to answer
+   customer queries accurately.
+3. Research Assistance: Researchers can quickly find relevant papers and extract key findings.
+4. Legal Document Analysis: Lawyers can search through case law and contracts efficiently.
+5. Medical Information Retrieval: Healthcare professionals can query medical literature
+   for evidence-based information.
+
+Chunking Strategies
+Effective chunking is critical for RAG performance:
+- Fixed-size chunking: Split text into chunks of N characters/tokens with some overlap.
+- Semantic chunking: Use sentence boundaries or paragraph breaks as natural split points.
+- Recursive chunking: Try multiple separators in order of priority (paragraphs, sentences, words).
+- Document-aware chunking: Respect document structure like headers and sections.
+
+The chunk size affects retrieval quality:
+- Too small: Chunks lack sufficient context.
+- Too large: Chunks may contain irrelevant information that dilutes the relevant content.
+- A typical sweet spot is 500-1500 characters with 10-20% overlap.
+
+Embedding Models
+Popular embedding models for RAG include:
+- OpenAI text-embedding-3-small: 1536 dimensions, good balance of quality and cost.
+- OpenAI text-embedding-3-large: 3072 dimensions, highest quality.
+- Cohere embed-v3: Multilingual support with strong performance.
+- BGE (BAAI): Open-source alternative with competitive performance.
+
+The choice of embedding model affects both the quality of retrieval and the cost of operation.
+Higher-dimensional embeddings generally capture more nuanced semantic relationships but
+require more storage and compute resources.

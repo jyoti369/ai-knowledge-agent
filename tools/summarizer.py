@@ -1,0 +1,46 @@
+"""
+Summarization tool using LLM to condense retrieved document chunks.
+"""
+
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage
+
+from config import Config
+
+
+@tool
+def summarize_tool(text: str) -> str:
+    """
+    Summarize a piece of text or multiple document chunks into a concise summary.
+    Use this tool when you have retrieved multiple document chunks and need to
+    create a coherent, condensed summary of the information.
+
+    Args:
+        text: The text content to summarize. Can be raw document content
+              or multiple concatenated search results.
+
+    Returns:
+        A concise, well-structured summary of the input text.
+    """
+    llm = ChatOpenAI(
+        model=Config.LLM_MODEL,
+        openai_api_key=Config.OPENAI_API_KEY,
+        temperature=0.3,
+    )
+
+    messages = [
+        SystemMessage(
+            content=(
+                "You are a precise summarization assistant. "
+                "Create a clear, concise summary of the provided text. "
+                "Preserve key facts, figures, and important details. "
+                "Use bullet points for multiple distinct pieces of information. "
+                "Keep the summary under 200 words."
+            )
+        ),
+        HumanMessage(content=f"Please summarize the following text:\n\n{text}"),
+    ]
+
+    response = llm.invoke(messages)
+    return response.content
