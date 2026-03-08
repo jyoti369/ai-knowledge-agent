@@ -5,6 +5,7 @@ Generates multiple query variations for better search recall.
 
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
+from langchain_ollama import ChatOllama
 from langchain_pinecone import PineconeVectorStore
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -29,11 +30,19 @@ def multi_query_search_tool(query: str) -> str:
         deduplicated and ranked by relevance.
     """
     # Generate query variations using LLM
-    llm = ChatGroq(
-        model=Config.LLM_MODEL,
-        api_key=Config.GROQ_API_KEY,
-        temperature=0.7,
-    )
+    if Config.LLM_PROVIDER == "ollama":
+        llm = ChatOllama(
+            model=Config.OLLAMA_MODEL,
+            base_url=Config.OLLAMA_BASE_URL,
+            temperature=0.7,
+        )
+    else:
+        llm = ChatGroq(
+            model=Config.LLM_MODEL,
+            api_key=Config.GROQ_API_KEY,
+            temperature=0.7,
+            max_retries=0,
+        )
 
     messages = [
         SystemMessage(

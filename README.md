@@ -1,13 +1,13 @@
 # 🤖 AI Knowledge Agent
 
-A **Retrieval-Augmented Generation (RAG)** powered knowledge assistant that uses **Agentic AI** with **Pinecone** vector database to intelligently answer questions from your documents.
+A **Retrieval-Augmented Generation (RAG)** powered knowledge assistant that uses **Pinecone** vector database and local/cloud LLMs to accurately answer questions from your documents.
 
-**✨ 100% Free Stack**: This version uses **Groq** for insanely fast LLM inference (Llama 3.3 70B) and **HuggingFace** for local embeddings, meaning zero subscription costs and no credit card required.
+**✨ 100% Free Stack**: Uses **Ollama** for local LLM inference (zero rate limits, zero cost) and **HuggingFace** for local embeddings. No subscriptions, no credit cards, no API quotas.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)
-![LangChain](https://img.shields.io/badge/LangChain-Agents-green?logo=chainlink)
+![LangChain](https://img.shields.io/badge/LangChain-RAG-green?logo=chainlink)
 ![Pinecone](https://img.shields.io/badge/Pinecone-VectorDB-purple)
-![Groq](https://img.shields.io/badge/Groq-Llama_3-orange)
+![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-orange)
 
 ---
 
@@ -20,19 +20,22 @@ A **Retrieval-Augmented Generation (RAG)** powered knowledge assistant that uses
                        │
                        ▼
 ┌──────────────────────────────────────────────────────┐
-│              🤖 LangChain Agent (ReAct)              │
+│            Simple RAG Pipeline                       │
 │                                                      │
-│   Thinks → Selects Tool → Observes → Responds       │
+│   1. Embed query (local HuggingFace model)           │
+│   2. Search Pinecone for top-K relevant chunks       │
+│   3. Send query + context to LLM                     │
+│   4. Return accurate, cited answer                   │
 │                                                      │
-│   Tools:                                             │
-│   ┌─────────────┐ ┌──────────┐ ┌─────────────────┐  │
-│   │ Vector Search│ │Summarizer│ │ Multi-Query     │  │
-│   │ (Pinecone)  │ │ (LLM)    │ │ Retriever       │  │
-│   └──────┬──────┘ └────┬─────┘ └────────┬────────┘  │
-│          │             │                │            │
-└──────────┼─────────────┼────────────────┼────────────┘
-           │             │                │
-           ▼             ▼                ▼
+│   LLM Providers:                                     │
+│   ┌──────────────┐  ┌──────────────┐                │
+│   │  🦙 Ollama   │  │  ⚡ Groq     │                │
+│   │  (Local, No  │  │  (Cloud,     │                │
+│   │   Limits)    │  │   Fast)      │                │
+│   └──────────────┘  └──────────────┘                │
+└──────────────────────┬───────────────────────────────┘
+                       │
+                       ▼
 ┌──────────────────────────────────────────────────────┐
 │                 Pinecone Vector DB                    │
 │                                                      │
@@ -51,8 +54,9 @@ A **Retrieval-Augmented Generation (RAG)** powered knowledge assistant that uses
 ### Prerequisites
 
 - Python 3.10+
-- **Groq API Key** (Free, instant here: [console.groq.com/keys](https://console.groq.com/keys))
-- **Pinecone API Key** (Free tier here: [app.pinecone.io](https://app.pinecone.io))
+- **Ollama** (Recommended — free, local, no rate limits): [ollama.com](https://ollama.com)
+- **Pinecone API Key** (Free tier: [app.pinecone.io](https://app.pinecone.io))
+- **Groq API Key** (Optional cloud alternative: [console.groq.com/keys](https://console.groq.com/keys))
 
 ### 1. Installation
 
@@ -64,78 +68,128 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configuration
+### 2. Install Ollama & Pull a Model
+
+```bash
+# Install Ollama from https://ollama.com, then:
+ollama pull llama3.1:8b
+```
+
+### 3. Configuration
 
 ```bash
 cp .env.example .env
 ```
 
-Edit your `.env` file and paste in your two API keys:
+Edit your `.env` file:
 
 ```bash
-GROQ_API_KEY=gsk_your-groq-key
+# Required
 PINECONE_API_KEY=pcsk_your-pinecone-key
 PINECONE_INDEX_NAME=knowledge-agent
+
+# LLM Provider: 'ollama' (local, recommended) or 'groq' (cloud)
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b
+
+# Only needed if LLM_PROVIDER=groq
+# GROQ_API_KEY=gsk_your-groq-key
 ```
 
 ---
 
-## 💻 Commands & Expectations
+## 💻 Commands & Usage
 
-### 1. Ingest Documents into the Database
+### 1. Ingest Documents
 
-Before asking questions, you need to give the agent knowledge. Simply place your files (`.pdf`, `.txt`, `.md`) into the `data/` folder and run:
+Place your files (`.pdf`, `.txt`, `.md`) into the `data/` folder and run:
 
 ```bash
 python ingest.py
 ```
 
-**What to expect:**
-- The script automatically reads your files and splits them into 1000-character chunks.
-- It generates embeddings (numerical representations) entirely locally on your machine using `all-MiniLM-L6-v2` (no internet upload required for embeddings).
-- It creates the `knowledge-agent` index in Pinecone if it doesn't exist.
-- It uploads the chunks to your Pinecone vector database.
-- A neat terminal UI displays the progress.
+**What happens:**
+- Reads your files and splits them into 1000-character chunks with 200-character overlap.
+- Generates embeddings locally using `all-MiniLM-L6-v2` (no data leaves your machine).
+- Creates and populates the Pinecone index.
 
-### 2. Start the Interactive Agent
-
-Once documents are ingested, start the interactive chat to query your documents:
+### 2. Interactive Chat
 
 ```bash
 python agent.py
 ```
 
 **What to expect:**
-- **Interactive Chat Interface**: You will enter a loop where you can ask back-to-back questions. Type `quit` to exit.
-- **Autonomous Reasoning**: When you ask a question, you'll see a `🧠 Thinking...` message while the Agent (powered by Groq) decides what tools to use.
-- **Tool Selection**:
-  - `vector_search_tool`: Searches Pinecone for semantic matches to your query.
-  - `summarize_tool`: Synthesizes lengthy retrieved chunks into a clean summary.
-  - `multi_query_search_tool`: If the first search is bad, the agent re-words your question multiple times to cast a wider net.
-- **Sourced Answers**: The agent will read the results and output a well-formatted answer, citing the specific document name (e.g., `Debojyoti_Mandal_Resume.pdf`) and chunk number it used to form the answer.
+- Clean interactive chat interface.
+- Instant responses to greetings (no LLM call needed).
+- Accurate, sourced answers from your documents with citations.
+- Type `quit` to exit, `help` for tips.
 
-### 3. Run a Single Prompt (CLI Mode)
-
-If you just want an answer and immediate exit (useful for scripts/automation):
+### 3. Single Query (CLI Mode)
 
 ```bash
-python agent.py --query "Summarize the key experience points in my resume."
+python agent.py --query "What did Debojyoti contribute at Red Hat?"
 ```
 
-**What to expect:**
-- Same behavior as above, but executes once and returns you directly back to your terminal shell.
+Executes once and exits — useful for scripts and automation.
 
 ---
 
-## 🛠️ How it Works under the Hood
+## 🛠️ How it Works
 
-This project uses the **ReAct (Reasoning + Acting)** pattern via LangChain. Instead of a standard chatbot, it is an **Agent**:
+This project uses a **simple, reliable RAG (Retrieval-Augmented Generation) pipeline**:
 
-1. **Thought** — "The user is asking about the resume. I need to search the database for 'resume experience'."
-2. **Action** — Calls the `vector_search_tool`.
-3. **Observation** — Reads the returned chunks from Pinecone.
-4. **Repeat** — "These chunks are too long, I should summarize them" → Calls `summarize_tool`.
-5. **Final Answer** — Delivers a comprehensive response with citations.
+1. **Embed** — Your query is converted to a vector using a local HuggingFace model.
+2. **Retrieve** — Pinecone finds the top-K most semantically similar document chunks.
+3. **Generate** — The query + retrieved context is sent to the LLM (Ollama or Groq).
+4. **Answer** — The LLM produces a detailed answer citing exact document sources.
+
+### Why Simple RAG over Agentic ReAct?
+
+We intentionally chose a direct RAG pipeline over the more complex ReAct agent pattern because:
+
+- **Reliability**: Small local models (8B params) struggle with ReAct's strict formatting requirements, causing parsing errors and timeouts.
+- **Speed**: 1 LLM call instead of 3-5 iterative reasoning loops.
+- **Accuracy**: The LLM focuses entirely on answering from context, not on tool-selection logic.
+
+---
+
+## ⚙️ Configuration Options
+
+| Variable | Default | Description |
+|---|---|---|
+| `LLM_PROVIDER` | `groq` | LLM backend: `ollama` (local) or `groq` (cloud) |
+| `OLLAMA_MODEL` | `llama3.1:8b` | Ollama model to use |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
+| `LLM_MODEL` | `llama-3.1-8b-instant` | Groq model name |
+| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Local HuggingFace embedding model |
+| `CHUNK_SIZE` | `1000` | Characters per document chunk |
+| `CHUNK_OVERLAP` | `200` | Overlap between chunks |
+| `TOP_K` | `10` | Number of chunks retrieved per query |
+
+---
+
+## 📂 Project Structure
+
+```
+ai-knowledge-agent/
+├── agent.py              # Main entry point (interactive + CLI)
+├── ingest.py             # Document ingestion pipeline
+├── config.py             # Centralized configuration
+├── requirements.txt      # Python dependencies
+├── data/                 # Place your documents here
+│   ├── *.pdf
+│   ├── *.txt
+│   └── *.md
+├── tools/                # Search, summarizer, multi-query tools
+│   ├── search.py
+│   ├── summarizer.py
+│   └── multi_query.py
+└── utils/                # Embedding model & document loader
+    ├── embeddings.py
+    └── document_loader.py
+```
 
 ---
 
@@ -143,4 +197,4 @@ This project uses the **ReAct (Reasoning + Acting)** pattern via LangChain. Inst
 
 MIT License — feel free to use this in your own projects!
 
-*Built with ❤️ using LangChain, Groq, Pinecone, and HuggingFace Local Embeddings.*
+*Built with ❤️ using LangChain, Ollama, Pinecone, and HuggingFace Local Embeddings.*

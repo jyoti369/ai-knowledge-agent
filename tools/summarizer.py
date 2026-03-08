@@ -4,6 +4,7 @@ Summarization tool using Groq (free tier).
 
 from langchain_core.tools import tool
 from langchain_groq import ChatGroq
+from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from config import Config
@@ -23,11 +24,19 @@ def summarize_tool(text: str) -> str:
     Returns:
         A concise, well-structured summary of the input text.
     """
-    llm = ChatGroq(
-        model=Config.LLM_MODEL,
-        api_key=Config.GROQ_API_KEY,
-        temperature=0.3,
-    )
+    if Config.LLM_PROVIDER == "ollama":
+        llm = ChatOllama(
+            model=Config.OLLAMA_MODEL,
+            base_url=Config.OLLAMA_BASE_URL,
+            temperature=0.3,
+        )
+    else:
+        llm = ChatGroq(
+            model=Config.LLM_MODEL,
+            api_key=Config.GROQ_API_KEY,
+            temperature=0.3,
+            max_retries=0,
+        )
 
     messages = [
         SystemMessage(

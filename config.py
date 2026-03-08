@@ -22,14 +22,17 @@ class Config:
 
     # Models
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+    LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "groq") # 'groq' or 'ollama'
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "llama-3.1-8b-instant")
+    OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11400")
+    OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
     # Chunking
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "1000"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "200"))
 
     # Retrieval
-    TOP_K: int = int(os.getenv("TOP_K", "5"))
+    TOP_K: int = int(os.getenv("TOP_K", "10"))
 
     # Paths
     DATA_DIR: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -41,8 +44,8 @@ class Config:
     def validate(cls) -> None:
         """Validate that required configuration is present."""
         errors = []
-        if not cls.GROQ_API_KEY:
-            errors.append("GROQ_API_KEY is not set")
+        if cls.LLM_PROVIDER == "groq" and not cls.GROQ_API_KEY:
+            errors.append("GROQ_API_KEY is not set (required for Groq provider)")
         if not cls.PINECONE_API_KEY:
             errors.append("PINECONE_API_KEY is not set")
 
@@ -50,6 +53,15 @@ class Config:
             print("❌ Configuration errors:")
             for error in errors:
                 print(f"   • {error}")
-            print("\n💡 Copy .env.example to .env and fill in your API keys:")
-            print("   cp .env.example .env")
             sys.exit(1)
+
+# --- NETWORK FIX ---
+# Force IPv4 for httpx/Groq client to prevent hanging on broken IPv6 networks
+import socket
+orig_getaddrinfo = socket.getaddrinfo
+def getaddrinfoIPv4(*args, **kwargs):
+    responses = orig_getaddrinfo(*args, **kwargs)
+    return [response for response in responses if response[0] == socket.AF_INET]
+socket.getaddrinfo = getaddrinfoIPv4
+
+

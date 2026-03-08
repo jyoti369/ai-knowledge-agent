@@ -1,108 +1,139 @@
 """
 AI Knowledge Agent — Main Entry Point.
-Uses a LangChain ReAct agent with tools to answer questions
-from documents stored in Pinecone.
+Uses a simple RAG (Retrieval-Augmented Generation) pipeline to answer
+questions from documents stored in Pinecone.
 """
+
+import os
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+os.environ["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "1"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
+os.environ["TQDM_DISABLE"] = "1"
 
 import argparse
 import sys
+import warnings
+
+warnings.simplefilter("ignore", FutureWarning)
+warnings.filterwarnings("ignore")
+
+import logging
+logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
+logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
 
 from langchain_groq import ChatGroq
-from langchain_classic.agents import AgentExecutor, create_react_agent
-from langchain_core.prompts import PromptTemplate
+from langchain_ollama import ChatOllama
+from langchain_pinecone import PineconeVectorStore
+from langchain_core.messages import SystemMessage, HumanMessage
 from rich.console import Console
 from rich.panel import Panel
 
 from config import Config
-from tools import vector_search_tool, summarize_tool, multi_query_search_tool
+from utils.embeddings import get_embedding_model
 
 console = Console()
 
-# ReAct Agent Prompt
-AGENT_PROMPT = PromptTemplate.from_template(
-    """You are an intelligent knowledge assistant. You help users find and understand 
-information from their document knowledge base stored in a Pinecone vector database.
+# Simple greetings that don't need document lookup
+GREETING_WORDS = {"hi", "hello", "hey", "hola", "greetings", "yo", "sup", "howdy"}
 
-You have access to the following tools:
+SYSTEM_PROMPT = """You are an intelligent knowledge assistant. You answer questions based ONLY on the provided context from documents.
 
-{tools}
-
-Use the following format:
-
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [{tool_names}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Guidelines:
-- Always start with `vector_search_tool` to find relevant information.
-- Use `summarize_tool` if you get long or multiple search results that need condensing.
-- Use `multi_query_search_tool` if the initial search doesn't return good results,
-  or if the question is complex and could be interpreted multiple ways.
-- Always cite your sources in the final answer (include document name and chunk number).
-- If no relevant information is found, say so honestly.
-- Keep your final answer well-structured and informative.
-
-Begin!
-
-Question: {input}
-Thought: {agent_scratchpad}"""
-)
+Rules:
+1. Answer ONLY using the provided context. Do not make up information.
+2. Be specific — extract exact details, names, numbers, and bullet points from the context.
+3. If someone asks about a specific company (e.g., "Red Hat"), ONLY include information that explicitly mentions that company. Do NOT mix in details from other companies.
+4. Always cite the source document name at the end.
+5. If the context doesn't contain relevant information, say "I couldn't find information about that in the documents."
+6. Keep answers well-structured and detailed."""
 
 
-def create_agent() -> AgentExecutor:
-    """Create and configure the ReAct agent with tools."""
-    Config.validate()
+def get_llm():
+    """Create the LLM based on the configured provider."""
+    if Config.LLM_PROVIDER == "ollama":
+        return ChatOllama(
+            model=Config.OLLAMA_MODEL,
+            base_url=Config.OLLAMA_BASE_URL,
+            temperature=0,
+        )
+    else:
+        return ChatGroq(
+            model=Config.LLM_MODEL,
+            api_key=Config.GROQ_API_KEY,
+            temperature=0,
+            max_retries=0,
+        )
 
-    llm = ChatGroq(
-        model=Config.LLM_MODEL,
-        api_key=Config.GROQ_API_KEY,
-        temperature=0,
+
+def search_documents(query: str) -> str:
+    """Search Pinecone for relevant document chunks."""
+    embeddings = get_embedding_model()
+
+    vectorstore = PineconeVectorStore(
+        index_name=Config.PINECONE_INDEX_NAME,
+        embedding=embeddings,
+        pinecone_api_key=Config.PINECONE_API_KEY,
     )
 
-    tools = [vector_search_tool, summarize_tool, multi_query_search_tool]
+    results = vectorstore.similarity_search_with_score(query, k=Config.TOP_K)
 
-    agent = create_react_agent(llm=llm, tools=tools, prompt=AGENT_PROMPT)
+    if not results:
+        return ""
 
-    return AgentExecutor(
-        agent=agent,
-        tools=tools,
-        verbose=False,
-        handle_parsing_errors=True,
-        max_iterations=5,
-        return_intermediate_steps=True,
-    )
+    formatted = []
+    for i, (doc, score) in enumerate(results, 1):
+        source = doc.metadata.get("source_file", "Unknown")
+        chunk_idx = doc.metadata.get("chunk_index", "?")
+        formatted.append(
+            f"[Document {i}: {source} (chunk {chunk_idx}, relevance: {score:.2f})]\n"
+            f"{doc.page_content}\n"
+        )
 
-
-def format_agent_response(result: dict) -> str:
-    """Format the agent's response with tool usage info."""
-    output_parts = []
-
-    # Show intermediate steps (tools used)
-    if result.get("intermediate_steps"):
-        output_parts.append("[dim]🧠 Agent reasoning:[/dim]")
-        for action, observation in result["intermediate_steps"]:
-            tool_name = action.tool
-            output_parts.append(f"   [cyan]→ Used tool:[/cyan] [bold]{tool_name}[/bold]")
-        output_parts.append("")
-
-    # Final answer
-    output_parts.append(result.get("output", "No answer generated."))
-
-    return "\n".join(output_parts)
+    return "\n".join(formatted)
 
 
-def interactive_mode(agent_executor: AgentExecutor) -> None:
+def ask(query: str, llm) -> str:
+    """Run a single RAG query: retrieve context, then generate answer."""
+
+    # Handle simple greetings without hitting Pinecone
+    if query.strip().lower().rstrip("!?.") in GREETING_WORDS:
+        return "Hello! I'm your AI Knowledge Agent. Ask me anything about your ingested documents. 👋"
+
+    # Step 1: Retrieve relevant documents
+    context = search_documents(query)
+
+    if not context.strip():
+        return "I couldn't find any relevant information in the documents for your question."
+
+    # Step 2: Generate answer using LLM + retrieved context
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=(
+            f"Context from documents:\n{context}\n\n"
+            f"Question: {query}\n\n"
+            f"Answer the question based ONLY on the context above."
+        )),
+    ]
+
+    response = llm.invoke(messages)
+    return response.content
+
+
+def interactive_mode() -> None:
     """Run the agent in interactive chat mode."""
+    Config.validate()
+    llm = get_llm()
+
+    provider = Config.LLM_PROVIDER.upper()
+    model = Config.OLLAMA_MODEL if Config.LLM_PROVIDER == "ollama" else Config.LLM_MODEL
+
     console.print(
         Panel(
-            "[bold cyan]🤖 AI Knowledge Agent — Interactive Mode[/bold cyan]\n"
-            "Ask questions about your ingested documents.\n"
-            "Type [bold]'quit'[/bold] to exit, [bold]'help'[/bold] for tips.",
+            f"[bold cyan]🤖 AI Knowledge Agent — Interactive Mode[/bold cyan]\n"
+            f"[dim]Provider: {provider} | Model: {model}[/dim]\n"
+            f"Ask questions about your ingested documents.\n"
+            f"Type [bold]'quit'[/bold] to exit, [bold]'help'[/bold] for tips.",
             border_style="cyan",
         )
     )
@@ -124,24 +155,22 @@ def interactive_mode(agent_executor: AgentExecutor) -> None:
                     Panel(
                         "💡 [bold]Tips:[/bold]\n"
                         "• Ask specific questions about your documents\n"
-                        '• Try: "What are the main topics covered?"\n'
-                        '• Try: "Summarize the key findings"\n'
-                        '• Try: "Compare concept A with concept B"\n'
+                        '• Try: "Who is Debojyoti?"\n'
+                        '• Try: "What did Debojyoti do at Red Hat?"\n'
+                        '• Try: "What are his technical skills?"\n'
                         "• Type 'quit' to exit",
                         border_style="yellow",
                     )
                 )
                 continue
 
-            # Run the agent
             console.print("[dim]🧠 Thinking...[/dim]\n")
 
-            result = agent_executor.invoke({"input": query})
-            formatted = format_agent_response(result)
+            answer = ask(query, llm)
 
             console.print(
                 Panel(
-                    formatted,
+                    answer,
                     title="[bold]🤖 Answer[/bold]",
                     border_style="green",
                     padding=(1, 2),
@@ -156,17 +185,19 @@ def interactive_mode(agent_executor: AgentExecutor) -> None:
             console.print(f"[red]❌ Error: {e}[/red]\n")
 
 
-def single_query_mode(agent_executor: AgentExecutor, query: str) -> None:
+def single_query_mode(query: str) -> None:
     """Run a single query and print the result."""
+    Config.validate()
+    llm = get_llm()
+
     console.print(f"[bold green]Query:[/bold green] {query}\n")
     console.print("[dim]🧠 Thinking...[/dim]\n")
 
     try:
-        result = agent_executor.invoke({"input": query})
-        formatted = format_agent_response(result)
+        answer = ask(query, llm)
         console.print(
             Panel(
-                formatted,
+                answer,
                 title="[bold]🤖 Answer[/bold]",
                 border_style="green",
                 padding=(1, 2),
@@ -189,12 +220,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    agent_executor = create_agent()
-
     if args.query:
-        single_query_mode(agent_executor, args.query)
+        single_query_mode(args.query)
     else:
-        interactive_mode(agent_executor)
+        interactive_mode()
 
 
 if __name__ == "__main__":
