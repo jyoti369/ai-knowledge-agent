@@ -29,6 +29,8 @@ from langchain_pinecone import PineconeVectorStore
 from langchain_core.messages import SystemMessage, HumanMessage
 from rich.console import Console
 from rich.panel import Panel
+from rich.live import Live
+from rich.text import Text
 
 from config import Config
 from utils.embeddings import get_embedding_model
@@ -93,21 +95,9 @@ def search_documents(query: str) -> str:
     return "\n".join(formatted)
 
 
-def ask(query: str, llm) -> str:
-    """Run a single RAG query: retrieve context, then generate answer."""
-
-    # Handle simple greetings without hitting Pinecone
-    if query.strip().lower().rstrip("!?.") in GREETING_WORDS:
-        return "Hello! I'm your AI Knowledge Agent. Ask me anything about your ingested documents. 👋"
-
-    # Step 1: Retrieve relevant documents
-    context = search_documents(query)
-
-    if not context.strip():
-        return "I couldn't find any relevant information in the documents for your question."
-
-    # Step 2: Generate answer using LLM + retrieved context
-    messages = [
+def build_messages(query: str, context: str) -> list:
+    """Build the LLM message list from query and retrieved context."""
+    return [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content=(
             f"Context from documents:\n{context}\n\n"
@@ -116,8 +106,37 @@ def ask(query: str, llm) -> str:
         )),
     ]
 
-    response = llm.invoke(messages)
-    return response.content
+
+def stream_answer(query: str, llm, streaming: bool = True) -> str:
+    """
+    Run a single RAG query with streaming output.
+    - If streaming=True: prints tokens live; returns full text at end.
+    - If streaming=False: returns full text silently (used for --query CLI).
+    """
+    # Greetings: instant, no LLM call
+    if query.strip().lower().rstrip("!?.") in GREETING_WORDS:
+        msg = "Hello! I'm your AI Knowledge Agent. Ask me anything about your ingested documents. 👋"
+        return msg
+
+    # Step 1: Retrieve relevant documents from Pinecone
+    context = search_documents(query)
+    if not context.strip():
+        return "I couldn't find any relevant information in the documents for your question."
+
+    messages = build_messages(query, context)
+
+    # Step 2: Stream tokens from LLM
+    full_text = ""
+    for chunk in llm.stream(messages):
+        token = chunk.content
+        full_text += token
+        if streaming:
+            console.print(token, end="", highlight=False, markup=False)
+
+    if streaming:
+        console.print()  # newline after streaming ends
+
+    return full_text
 
 
 def interactive_mode() -> None:
@@ -164,18 +183,28 @@ def interactive_mode() -> None:
                 )
                 continue
 
-            console.print("[dim]🧠 Thinking...[/dim]\n")
+            console.print("[dim]🧠 Thinking...[/dim]")
 
-            answer = ask(query, llm)
-
-            console.print(
-                Panel(
-                    answer,
-                    title="[bold]🤖 Answer[/bold]",
-                    border_style="green",
-                    padding=(1, 2),
+            # Greetings: print instantly in a panel
+            if query.strip().lower().rstrip("!?.") in GREETING_WORDS:
+                console.print(
+                    Panel(
+                        "Hello! I'm your AI Knowledge Agent. Ask me anything about your ingested documents. 👋",
+                        title="[bold]🤖 Answer[/bold]",
+                        border_style="green",
+                        padding=(1, 2),
+                    )
                 )
-            )
+                console.print()
+                continue
+
+            # Stream the answer with a header + live token output
+            console.print()
+            console.rule("[bold green]🤖 Answer[/bold green]", style="green")
+            console.print()
+            stream_answer(query, llm, streaming=True)
+            console.print()
+            console.rule(style="green")
             console.print()
 
         except KeyboardInterrupt:
@@ -191,18 +220,15 @@ def single_query_mode(query: str) -> None:
     llm = get_llm()
 
     console.print(f"[bold green]Query:[/bold green] {query}\n")
-    console.print("[dim]🧠 Thinking...[/dim]\n")
+    console.print("[dim]🧠 Thinking...[/dim]")
 
     try:
-        answer = ask(query, llm)
-        console.print(
-            Panel(
-                answer,
-                title="[bold]🤖 Answer[/bold]",
-                border_style="green",
-                padding=(1, 2),
-            )
-        )
+        console.print()
+        console.rule("[bold green]🤖 Answer[/bold green]", style="green")
+        console.print()
+        stream_answer(query, llm, streaming=True)
+        console.print()
+        console.rule(style="green")
     except Exception as e:
         console.print(f"[red]❌ Error: {e}[/red]")
         sys.exit(1)
